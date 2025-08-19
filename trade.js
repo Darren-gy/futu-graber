@@ -16,7 +16,7 @@ let currentSignalStr = ''
 // 主函数
 async function main() {
 
-  const config = JSON.parse(fs.readFileSync('/Users/shein-andyzhou/Documents/PM/keysss.txt', 'utf8'));
+  const config = JSON.parse(fs.readFileSync('./keysss.txt', 'utf8'));
   const conf = new Config({ ...config, enablePrintQuotePackages: true });
   const quoteCtx = await new QuoteContext.new(conf)
 
