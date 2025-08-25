@@ -71,7 +71,9 @@ async function main() {
       for (const channel of response.channels) {
         for (const pos of channel.positions) {
           positions.push({
+            // 股票代码
             symbol: pos.symbol,
+            // 持仓股数
             quantity: pos.quantity.toNumber(),
             // 注意：stockPositions API 不直接提供市值，这里需要另外计算
             // 这里假设有市值数据，实际使用时可能需要通过行情API获取价格后计算
@@ -89,7 +91,7 @@ async function main() {
   // 获取账户资产信息，包括融资额度
   async function getAccountBalance(ctx) {
     try {
-      const balance = await ctx.accountBalance();
+      const balance = await ctx.accountBalance("USD");
 
       // // 获取融资额度信息
       // let marginAmount = 0;
@@ -103,11 +105,17 @@ async function main() {
       // }
 
       return {
+        // 总资产 = 净资产
         totalAssets: balance[0].netAssets.toNumber(),
-        cashBalance: balance[0].netAssets.toNumber() / 8,
+        // 可用现金
+        cashBalance: balance[0].totalCash.toNumber(),
         marginAmount: 0,
-        // 总可用资产 = 净资产 + 可用融资额度
-        totalAvailableAssets: balance[0].netAssets.toNumber() / 8
+        // // 最大融资金额
+        // maxFinanceAmount: balance[0].maxFinanceAmount.toNumber(),
+        // // 剩余融资金额
+        // remainingFinanceAmount: balance[0].remainingFinanceAmount.toNumber(),
+        // 总资产 = 净资产
+        totalAvailableAssets: balance[0].netAssets.toNumber()
       };
     } catch (error) {
       console.error('获取账户资产信息失败:', error);
