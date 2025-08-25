@@ -222,7 +222,7 @@ async function main() {
     if (!marketPrice) return false;
 
     const deviation = Math.abs(orderPrice - marketPrice) / marketPrice;
-    return deviation <= 0.003; // 0.1%以内的偏离是可接受的
+    return deviation <= 0.005; // 0.1%以内的偏离是可接受的
   }
 
   // 执行交易
@@ -245,7 +245,8 @@ async function main() {
           orderType: OrderType.LO,
           side: trade.side,
           timeInForce: TimeInForceType.Day,
-          submittedPrice: new Decimal(Math.round(trade.price * 100) / 100),
+          // 避免错过订单，使用市价提单交易
+          submittedPrice: new Decimal(Math.round(marketPrice * 100) / 100),
           submittedQuantity: new Decimal(trade.quantity.toString()),
         });
 
@@ -330,7 +331,7 @@ console.log(`程序启动，使用cron任务每5秒检查一次交易信号`);
 
 // 使用cron任务，每5秒执行一次
 let isRunning = false;
-cron.schedule('*/30 * * * * *', async () => {
+cron.schedule('*/5 * * * * *', async () => {
   if (isRunning) {
     console.log(`上一个任务还在执行中，跳过本次执行: ${new Date().toLocaleString()}`);
     return;
