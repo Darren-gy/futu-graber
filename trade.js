@@ -29,9 +29,13 @@ async function main() {
         .map(line => {
           const parts = line.split(',');
           return {
+            // 股票名称
             name: parts[0],
+            // 持仓比例
             allocation: parseAllocation(parts[1]),
+            // 股票代码
             symbol: `${parts[2]}.US`,
+            // 价格
             price: parsePrice(parts[3])
           };
         });
@@ -70,6 +74,9 @@ async function main() {
       // 遍历所有账户通道
       for (const channel of response.channels) {
         for (const pos of channel.positions) {
+          const marketPrice = await getMarketPrice(ctx, pos.symbol);
+          // 拿到Promise { 34.36 } 里面的金额
+
           positions.push({
             // 股票代码
             symbol: pos.symbol,
@@ -77,7 +84,7 @@ async function main() {
             quantity: pos.quantity.toNumber(),
             // 注意：stockPositions API 不直接提供市值，这里需要另外计算
             // 这里假设有市值数据，实际使用时可能需要通过行情API获取价格后计算
-            marketValue: 0 // 需要通过当前价格计算
+            marketValue: marketPrice // 需要通过当前市价
           });
         }
       }
@@ -138,6 +145,9 @@ async function main() {
 
 
   // 计算需要调整的交易
+  // signals：交易信号，包括名称name、持仓比例allocation、股票代码symbol和参考价格price
+  // positions：当前持仓信息，包括股票代码symbol、持仓股数quantity和市值marketValue
+  // accountBalance：账户资产信息，包括总资产totalAssets|totalAvailableAssets、可用现金cashBalance和融资额度
   function calculateTradeAdjustments(signals, positions, accountBalance) {
     const trades = [];
 
@@ -145,9 +155,11 @@ async function main() {
     signals.forEach(signal => {
       if (!signal.symbol) return;
 
+      // 计算目标市值
       const targetValue = accountBalance.totalAvailableAssets * signal.allocation.target;
+      // 计算当前市值
       const currentPosition = positions.find(p => p.symbol === signal.symbol);
-      const currentValue = currentPosition ? currentPosition.marketValue : 0;
+      const currentValue = currentPosition ? currentPosition.marketValue * currentPosition.quantity : 0;
 
       // 如果目标持仓为0且当前有持仓，直接全部卖出
       if (signal.allocation.target === 0 && currentPosition && currentPosition.quantity > 0) {
@@ -284,11 +296,18 @@ async function main() {
       console.error('获取未成交订单失败:', error);
     }
   }
+
   try {
 
 
     // 读取上次提交的时间戳
     const lastCommitTimestamp = readLastCommitTimestamp();
+
+    // 保存当前交易信号作为时间戳（如果交易信息没有变化，则不执行交易）
+    if (!currentSignalStr) {
+      currentSignalStr = lastCommitTimestamp;
+    }
+
     // 如果上次提交的时间戳存在，且交易信号没有变化，则不执行交易
     if (lastCommitTimestamp && currentSignalStr === lastCommitTimestamp) {
       console.log('交易信号未变化，不执行交易');
@@ -303,19 +322,15 @@ async function main() {
 
     // 读取交易信号
     const signals = readTradeSignals();
-
-
-
     console.log('当前交易信号:', signals);
 
-    // 获取当前持仓和账户资产
+    // 获取当前持仓
     const positions = await getCurrentPositions(ctx);
-    const accountBalance = await getAccountBalance(ctx);
-
     console.log('当前持仓:', positions);
+
+    // 获取账户资产
+    const accountBalance = await getAccountBalance(ctx);
     console.log('账户资产:', accountBalance);
-
-
 
     // 计算需要调整的交易
     const trades = calculateTradeAdjustments(signals, positions, accountBalance);
@@ -335,11 +350,11 @@ async function main() {
 
 }
 
-console.log(`程序启动，使用cron任务每5秒检查一次交易信号`);
+console.log(`程序启动，使用cron任务每10秒检查一次交易信号`);
 
-// 使用cron任务，每5秒执行一次
+// 使用cron任务，每10秒执行一次
 let isRunning = false;
-cron.schedule('*/5 * * * * *', async () => {
+cron.schedule('*/10 * * * * *', async () => {
   if (isRunning) {
     console.log(`上一个任务还在执行中，跳过本次执行: ${new Date().toLocaleString()}`);
     return;
