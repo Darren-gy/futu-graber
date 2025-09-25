@@ -242,7 +242,7 @@ async function main() {
     if (!marketPrice) return false;
 
     const deviation = Math.abs(orderPrice - marketPrice) / marketPrice;
-    return deviation <= 0.005; // 0.1%以内的偏离是可接受的
+    return deviation <= 0.020; // 2%以内的偏离是可接受的
   }
 
   // 执行交易
@@ -321,7 +321,14 @@ async function main() {
     const ctx = await TradeContext.new(conf);
 
     // 读取交易信号
-    const signals = readTradeSignals();
+    const sortedData = readTradeSignals();
+    // 按 current - target 的值降序排列，避免先卖后买不够资金操作
+    const signals = sortedData.sort((a, b) => {
+      const diffA = a.allocation.current - a.allocation.target;
+      const diffB = b.allocation.current - b.allocation.target;
+      return diffB - diffA;
+    });
+
     console.log('当前交易信号:', signals);
 
     // 获取当前持仓
