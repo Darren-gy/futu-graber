@@ -3,6 +3,3 @@ node_modules/
 
 # 忽略特定命名的文件
 keysss.txt
-data.csv
-lastcommit
-window_dump.xml

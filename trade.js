@@ -74,7 +74,7 @@ async function main() {
       // 遍历所有账户通道
       for (const channel of response.channels) {
         for (const pos of channel.positions) {
-          const marketPrice = await getMarketPrice(ctx, pos.symbol);
+          const marketPrice = await getMarketPrice(ctx, pos);
           // 拿到Promise { 34.36 } 里面的金额
 
           positions.push({
@@ -223,16 +223,23 @@ async function main() {
   }
 
   // 获取股票的市场价格
-  async function getMarketPrice(ctx, symbol) {
+  async function getMarketPrice(ctx, trade) {
     try {
-      const quote = await quoteCtx.quote([symbol]);
+      const quote = await quoteCtx.quote([trade.symbol]);
       for (let obj of quote) {
         console.log(obj.toString())
       }
       const [price] = [...quote]
-      return price.lastDone.toNumber();
+      console.log('盘前preMarketQuote:', price.preMarketQuote.toString());
+      console.log('盘后postMarketQuote:', price.postMarketQuote.toString());
+      // 给trade.price不为空则赋值
+      if (trade.price === null) {
+        trade.price = price.preMarketQuote.lastDone.toNumber();
+      }
+
+      return price.preMarketQuote.lastDone.toNumber();
     } catch (error) {
-      console.error(`获取${symbol}市场价格失败:`, error);
+      console.error(`获取${trade.symbol}市场价格失败:`, error);
       return null;
     }
   }
@@ -250,7 +257,7 @@ async function main() {
     for (const trade of trades) {
       try {
         // 获取市场价格
-        const marketPrice = await getMarketPrice(ctx, trade.symbol);
+        const marketPrice = await getMarketPrice(ctx, trade);
 
         // 检查价格偏离度
         if (!isPriceDeviationAcceptable(trade.price, marketPrice)) {
