@@ -65,6 +65,31 @@ async function main() {
     return match ? parseFloat(match[1]) : null;
   }
 
+  // 调整交易信号
+  async function adjustTradeSignals(ctx, sortedData) {
+    try {
+      // 按 current - target 的值降序排列，避免先卖后买不够资金操作
+      const signals = sortedData.sort((a, b) => {
+        const diffA = a.allocation.current - a.allocation.target;
+        const diffB = b.allocation.current - b.allocation.target;
+        return diffB - diffA;
+      });
+
+      // 遍历所有账户通道
+      for (const signal of signals) {
+        // 如果signal.price为空，获取当前市价
+        if (!signal.price) {
+          const marketPrice = await getMarketPrice(ctx, signal.symbol);
+          signal.price = marketPrice;
+        }
+      }
+      return signals;
+    } catch (error) {
+      console.error('获取持仓信息失败:', error);
+      return [];
+    }
+  }
+
   // 获取当前持仓信息
   async function getCurrentPositions(ctx) {
     try {
@@ -74,7 +99,7 @@ async function main() {
       // 遍历所有账户通道
       for (const channel of response.channels) {
         for (const pos of channel.positions) {
-          const marketPrice = await getMarketPrice(ctx, pos);
+          const marketPrice = await getMarketPrice(ctx, pos.symbol);
           // 拿到Promise { 34.36 } 里面的金额
 
           positions.push({
@@ -223,23 +248,32 @@ async function main() {
   }
 
   // 获取股票的市场价格
-  async function getMarketPrice(ctx, trade) {
+  async function getMarketPrice(ctx, symbol) {
     try {
-      const quote = await quoteCtx.quote([trade.symbol]);
+      const quote = await quoteCtx.quote([symbol]);
       for (let obj of quote) {
         console.log(obj.toString())
       }
       const [price] = [...quote]
-      console.log('盘前preMarketQuote:', price.preMarketQuote.toString());
-      console.log('盘后postMarketQuote:', price.postMarketQuote.toString());
-      // 给trade.price不为空则赋值
-      if (trade.price === null) {
-        trade.price = price.preMarketQuote.lastDone.toNumber();
+      // 判断当前时间是否在哪个区间（盘中为[21:30:00, 04:00:00],盘前为[16:00:00, 09:30:00],盘后为[04:00:00, 08:00:00],夜盘为[08:00:00, 16:00:00]）
+      const now = new Date();
+      // 定义字段lastDone
+      let marketPrice = price.lastDone.toNumber();
+      console.log('symbol:', symbol);
+      // 盘前
+      if (now.getHours() >= 16 && now.getHours() < 21) {
+        console.log('盘前lastDone:', price.preMarketQuote.lastDone.toNumber());
+        marketPrice = price.preMarketQuote.lastDone.toNumber();
+      }
+      // 盘后
+      else if (now.getHours() >= 4 && now.getHours() < 8) {
+        console.log('盘后lastDone:', price.postMarketQuote.lastDone.toNumber());
+        marketPrice = price.postMarketQuote.lastDone.toNumber();
       }
 
-      return price.preMarketQuote.lastDone.toNumber();
+      return marketPrice;
     } catch (error) {
-      console.error(`获取${trade.symbol}市场价格失败:`, error);
+      console.error(`获取${symbol}市场价格失败:`, error);
       return null;
     }
   }
@@ -249,7 +283,7 @@ async function main() {
     if (!marketPrice) return false;
 
     const deviation = Math.abs(orderPrice - marketPrice) / marketPrice;
-    return deviation <= 0.020; // 2%以内的偏离是可接受的
+    return deviation <= 0.040; // 2%以内的偏离是可接受的
   }
 
   // 执行交易
@@ -257,7 +291,7 @@ async function main() {
     for (const trade of trades) {
       try {
         // 获取市场价格
-        const marketPrice = await getMarketPrice(ctx, trade);
+        const marketPrice = await getMarketPrice(ctx, trade.symbol);
 
         // 检查价格偏离度
         if (!isPriceDeviationAcceptable(trade.price, marketPrice)) {
@@ -311,9 +345,9 @@ async function main() {
     const lastCommitTimestamp = readLastCommitTimestamp();
 
     // 保存当前交易信号作为时间戳（如果交易信息没有变化，则不执行交易）
-    if (!currentSignalStr) {
-      currentSignalStr = lastCommitTimestamp;
-    }
+    // if (!currentSignalStr) {
+    //   currentSignalStr = lastCommitTimestamp;
+    // }
 
     // 如果上次提交的时间戳存在，且交易信号没有变化，则不执行交易
     if (lastCommitTimestamp && currentSignalStr === lastCommitTimestamp) {
@@ -329,14 +363,13 @@ async function main() {
 
     // 读取交易信号
     const sortedData = readTradeSignals();
-    // 按 current - target 的值降序排列，避免先卖后买不够资金操作
-    const signals = sortedData.sort((a, b) => {
-      const diffA = a.allocation.current - a.allocation.target;
-      const diffB = b.allocation.current - b.allocation.target;
-      return diffB - diffA;
-    });
 
-    console.log('当前交易信号:', signals);
+    console.log('当前交易信号:', sortedData);
+
+    // 调整交易信号
+    const signals = await adjustTradeSignals(ctx, sortedData);
+
+    console.log('调整好后的交易信号:', signals);
 
     // 获取当前持仓
     const positions = await getCurrentPositions(ctx);
