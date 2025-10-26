@@ -118,6 +118,9 @@ class AdbHelper {
     static async swipe(x1, y1, x2, y2, duration = 300, deviceId) {
         return await executeAdbCommand(`shell input swipe ${x1} ${y1} ${x2} ${y2} ${duration}`, deviceId);
     }
+    static async back(deviceId) {
+        return await executeAdbCommand('shell input keyevent 4', deviceId);
+    }
 }
 
 

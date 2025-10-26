@@ -1,5 +1,6 @@
 const fs = require('fs');
 const xml2js = require('xml2js');
+const { AdbHelper } = require('./adb-examples');
 
 class UIHierarchyParser {
     constructor() {
@@ -8,33 +9,55 @@ class UIHierarchyParser {
 
     parseString(xmlContent, outputPath) {
         try {
-            // Parse XML to JSON
             this.parser.parseString(xmlContent, (err, result) => {
                 if (err) {
                     console.error('Error parsing XML:', err);
+                    // Attempt a single BACK to recover UI state
+                    AdbHelper.back().catch(() => { });
                     return;
                 }
-                const nodes = findNodeByResourceId(result.hierarchy, 'cn.futu.trader:id/quote_portfolio_position_history_rv');
-                const date = nodes.node[0].node.$.text
-                const lastDate = fs.readFileSync('./lastcommit', { encoding: 'utf8' })
-                if (date === lastDate) {
-                    return
+
+                const nodes = findNodeByResourceId(
+                    result?.hierarchy,
+                    'cn.futu.trader:id/quote_portfolio_position_history_rv'
+                );
+
+                const rows = nodes?.node;
+                if (!rows || !Array.isArray(rows) || rows.length === 0 || !rows[0]?.node?.$?.text) {
+                    console.warn('Expected UI nodes not found; performing BACK and skipping this tick.');
+                    AdbHelper.back().catch(() => { });
+                    return;
                 }
-                fs.writeFileSync('./lastcommit', date, { encoding: 'utf8' })
-                const startIndex = 1
-                let endIndex = 0
-                for (let i = startIndex; i < nodes.node.length; i++) {
-                    if (nodes.node[i].node.$?.text?.startsWith('2025')) {
-                        endIndex = i
-                        break
+
+                const date = rows[0].node.$.text;
+                const lastDate = fs.existsSync('./lastcommit')
+                    ? fs.readFileSync('./lastcommit', { encoding: 'utf8' })
+                    : '';
+                if (date === lastDate) {
+                    return;
+                }
+
+                fs.writeFileSync('./lastcommit', date, { encoding: 'utf8' });
+
+                const startIndex = 1;
+                let endIndex = rows.length;
+                for (let i = startIndex; i < rows.length; i++) {
+                    if (rows[i]?.node?.$?.text?.startsWith('2025')) {
+                        endIndex = i;
+                        break;
                     }
                 }
-                const rangeStocks = nodes.node.slice(1, endIndex)
-                const csvStr = rangeStocks.map(item => item.node.map(i => i.$.text).join(',')).join('\n')
-                fs.writeFileSync('./data.csv', csvStr, { encoding: 'utf8' })
+
+                const rangeStocks = rows.slice(1, endIndex);
+                const csvStr = rangeStocks
+                    .map(item => (Array.isArray(item.node) ? item.node : [item.node]))
+                    .map(list => list.map(i => i?.$?.text ?? '').join(','))
+                    .join('\n');
+                fs.writeFileSync('./data.csv', csvStr, { encoding: 'utf8' });
             });
         } catch (error) {
             console.error('Error in parseString:', error);
+            AdbHelper.back().catch(() => { });
         }
     }
 }
