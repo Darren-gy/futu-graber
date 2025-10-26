@@ -255,13 +255,17 @@ async function main() {
         console.log(obj.toString())
       }
       const [price] = [...quote]
-      // 判断当前时间是否在哪个区间（盘中为[21:30:00, 04:00:00],盘前为[16:00:00, 09:30:00],盘后为[04:00:00, 08:00:00],夜盘为[08:00:00, 16:00:00]）
+      // 判断当前时间是否在哪个区间（盘中为[21:30:00, 04:00:00],盘前为[16:00:00, 21:30:00],盘后为[04:00:00, 08:00:00],夜盘为[08:00:00, 16:00:00]）
       const now = new Date();
       // 定义字段lastDone
       let marketPrice = price.lastDone.toNumber();
       console.log('symbol:', symbol);
+
+      const currentTotalMinutes = now.getHours() * 60 + now.getMinutes();
+      const startMinutes = 16 * 60;      // 16:00 = 960分钟
+      const endMinutes = 21 * 60 + 30;   // 21:30 = 1290分钟
       // 盘前
-      if (now.getHours() >= 16 && now.getHours() < 21) {
+      if (currentTotalMinutes >= startMinutes && currentTotalMinutes < endMinutes) {
         console.log('盘前lastDone:', price.preMarketQuote.lastDone.toNumber());
         marketPrice = price.preMarketQuote.lastDone.toNumber();
       }
@@ -338,22 +342,50 @@ async function main() {
     }
   }
 
+  // 时间比较函数（支持 "YYYY/MM/DD HH:mm:ss" 格式）
+  function isTimeLater(timeStr1, timeStr2) {
+    // 将时间字符串转换为 Date 对象进行比较
+    const date1 = new Date(timeStr1.replace(/\//g, '-'));
+    const date2 = new Date(timeStr2.replace(/\//g, '-'));
+    return date1 >= date2;
+  }
+
+  // 获取当前时间字符串
+  function getCurrentTimeStr() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    // const hours = String(now.getHours()).padStart(2, '0');
+    // const minutes = String(now.getMinutes()).padStart(2, '0');
+    // const seconds = String(now.getSeconds()).padStart(2, '0');
+    // return `${year}/${month}/${day} ${hours}:${minutes}:${seconds}`;
+    return `${year}/${month}/${day} 00:00:00`;
+  }
+
   try {
 
+    // 保存当前交易信号作为时间戳（如果交易信息没有变化，则不执行交易）
+    if (!currentSignalStr) {
+      // 当前有交易
+      // currentSignalStr = getCurrentTimeStr();
+      // 当前无交易
+      currentSignalStr = readLastCommitTimestamp();
+    }
 
     // 读取上次提交的时间戳
     const lastCommitTimestamp = readLastCommitTimestamp();
 
-    // 保存当前交易信号作为时间戳（如果交易信息没有变化，则不执行交易）
-    // if (!currentSignalStr) {
-    //   currentSignalStr = lastCommitTimestamp;
-    // }
+    console.log(`最后交易时间: ${currentSignalStr}`);
+    console.log(`最新交易时间: ${lastCommitTimestamp}`);
 
-    // 如果上次提交的时间戳存在，且交易信号没有变化，则不执行交易
-    if (lastCommitTimestamp && currentSignalStr === lastCommitTimestamp) {
+    // 如果上次提交的时间戳存在，且比当前时间更晚（更新），则不执行交易
+    if (lastCommitTimestamp && isTimeLater(currentSignalStr, lastCommitTimestamp)) {
       console.log('交易信号未变化，不执行交易');
       return;
     }
+
+
     // 保存当前交易信号作为时间戳
     currentSignalStr = lastCommitTimestamp
 

@@ -69,7 +69,7 @@ function scrollUp() {
     getNewXMLStructure()
     setTimeout(() => {
         scrollUp()
-    }, 10000 + 3000 * Math.random())
+    }, 15000)
 }
 
 async function getNewXMLStructure() {
