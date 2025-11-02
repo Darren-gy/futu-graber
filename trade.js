@@ -77,11 +77,9 @@ async function main() {
 
       // 遍历所有账户通道
       for (const signal of signals) {
-        // 如果signal.price为空，获取当前市价
-        if (!signal.price) {
-          const marketPrice = await getMarketPrice(ctx, signal.symbol);
-          signal.price = marketPrice;
-        }
+        // 所有价格都换成市价
+        const marketPrice = await getMarketPrice(ctx, signal.symbol);
+        signal.price = marketPrice;
       }
       return signals;
     } catch (error) {
@@ -255,22 +253,23 @@ async function main() {
         console.log(obj.toString())
       }
       const [price] = [...quote]
-      // 判断当前时间是否在哪个区间（盘中为[21:30:00, 04:00:00],盘前为[16:00:00, 21:30:00],盘后为[04:00:00, 08:00:00],夜盘为[08:00:00, 16:00:00]）
+      // 夏令时：判断当前时间是否在哪个区间（盘中为[21:30:00, 04:00:00],盘前为[16:00:00, 21:30:00],盘后为[04:00:00, 08:00:00],夜盘为[08:00:00, 16:00:00]）
+      // 冬令时：判断当前时间是否在哪个区间（盘中为[22:30:00, 05:00:00],盘前为[17:00:00, 22:30:00],盘后为[05:00:00, 09:00:00],夜盘为[09:00:00, 17:00:00]）
       const now = new Date();
       // 定义字段lastDone
-      let marketPrice = price.lastDone.toNumber();
+      let marketPrice = price.lastDone.toNumber();/*  */
       console.log('symbol:', symbol);
 
       const currentTotalMinutes = now.getHours() * 60 + now.getMinutes();
-      const startMinutes = 16 * 60;      // 16:00 = 960分钟
-      const endMinutes = 21 * 60 + 30;   // 21:30 = 1290分钟
+      const startMinutes = 17 * 60;      // 夏令时：16:00 = 960分钟，冬令时：17:00 = 1020分钟
+      const endMinutes = 22 * 60 + 30;   // 夏令时：21:30 = 1290分钟，冬令时：22:30 = 1350分钟
       // 盘前
       if (currentTotalMinutes >= startMinutes && currentTotalMinutes < endMinutes) {
         console.log('盘前lastDone:', price.preMarketQuote.lastDone.toNumber());
         marketPrice = price.preMarketQuote.lastDone.toNumber();
       }
       // 盘后
-      else if (now.getHours() >= 4 && now.getHours() < 8) {
+      else if (now.getHours() >= 5 && now.getHours() < 9) {
         console.log('盘后lastDone:', price.postMarketQuote.lastDone.toNumber());
         marketPrice = price.postMarketQuote.lastDone.toNumber();
       }
