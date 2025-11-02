@@ -12,8 +12,6 @@ class UIHierarchyParser {
             this.parser.parseString(xmlContent, (err, result) => {
                 if (err) {
                     console.error('Error parsing XML:', err);
-                    // Attempt a single BACK to recover UI state
-                    AdbHelper.back().catch(() => { });
                     return;
                 }
 
@@ -24,8 +22,6 @@ class UIHierarchyParser {
 
                 const rows = nodes?.node;
                 if (!rows || !Array.isArray(rows) || rows.length === 0 || !rows[0]?.node?.$?.text) {
-                    console.warn('Expected UI nodes not found; performing BACK and skipping this tick.');
-                    AdbHelper.back().catch(() => { });
                     return;
                 }
 
@@ -33,7 +29,7 @@ class UIHierarchyParser {
                 const lastDate = fs.existsSync('./lastcommit')
                     ? fs.readFileSync('./lastcommit', { encoding: 'utf8' })
                     : '';
-                if (date === lastDate) {
+                if (date <= lastDate) {
                     return;
                 }
 
@@ -57,7 +53,6 @@ class UIHierarchyParser {
             });
         } catch (error) {
             console.error('Error in parseString:', error);
-            AdbHelper.back().catch(() => { });
         }
     }
 }
